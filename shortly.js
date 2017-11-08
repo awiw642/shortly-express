@@ -2,7 +2,8 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
-
+var bcrypt = require('bcrypt-nodejs');
+var session = require('express-session');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -12,35 +13,78 @@ var Link = require('./app/models/link');
 var Click = require('./app/models/click');
 
 var app = express();
-
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 app.use(partials());
+console.log('partials-----', partials);
+console.log('partials invoked -----', partials());
 // Parse JSON (uniform resource locators)
 app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+app.use(session({
+  secret: 'keyboard cat',
+  resave: false,
+  saveUninitialized: true
+}));
 
-app.get('/', 
+app.get('/', util.checkUserSession,
 function(req, res) {
   res.render('index');
 });
 
-app.get('/create', 
+app.get('/create',
 function(req, res) {
   res.render('index');
 });
 
-app.get('/links', 
+app.get('/links',
 function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.status(200).send(links.models);
   });
 });
 
-app.post('/links', 
+app.get('/login', (req, res) => {
+  res.render('login');
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(function(err) {
+    res.redirect('/login');
+  });
+});
+
+app.get('/signup', (req, res) => {
+  res.render('signup');
+});
+
+app.post('/login', function(req, res) {
+  console.log(req.body);
+  new User({username: req.body.username}).fetch().then(function(found) {
+    console.log(found);
+    if (found) {
+      util.comparePassword(req, res, req.body.username, found, util.createSession);
+    } else {
+      console.log('username does not exist');
+    }
+  });
+});
+
+
+
+
+app.post('/signup', function (req, res) {
+  var hash = bcrypt.hashSync(req.body.password);
+  new User({username: req.body.username, password: hash}).save().then(function() {
+    return res.redirect('/login');
+  });
+});
+
+
+app.post('/links',
 function(req, res) {
   var uri = req.body.url;
 
